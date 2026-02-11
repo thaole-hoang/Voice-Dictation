@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Commercial Insurance Policy Comparison</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <!-- Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+    <!-- Sidebar -->
+    <nav class="sidebar">
+        <div class="logo">
+            <i class="fa-brands fa-neos"></i>
+        </div>
+        <div class="nav-items">
+            <div class="nav-item active">
+                <i class="fa-solid fa-briefcase"></i>
+            </div>
+            <div class="nav-item">
+                <i class="fa-regular fa-file-lines"></i>
+            </div>
+            <div class="nav-item">
+                <i class="fa-regular fa-heart"></i>
+            </div>
+            <div class="nav-item">
+                <i class="fa-solid fa-shield-halved"></i>
+            </div>
+            <div class="nav-item">
+                <i class="fa-solid fa-list-ul"></i>
+            </div>
+            <div class="nav-item">
+                <i class="fa-solid fa-gear"></i>
+            </div>
+        </div>
+        <div class="nav-footer">
+            <div class="nav-item">
+                <i class="fa-regular fa-comment-dots"></i>
+            </div>
+            <div class="nav-item">
+                <i class="fa-solid fa-life-ring"></i>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="main-wrapper">
+        <!-- Top Header -->
+        <header class="top-header">
+            <div class="breadcrumbs">
+                <span class="crumb">Workflows</span>
+                <i class="fa-solid fa-chevron-right separator"></i>
+                <span class="crumb">Compare Quotes</span>
+                <i class="fa-solid fa-chevron-right separator"></i>
+                <span class="crumb active">Commercial Insurance Policy Comparison</span>
+            </div>
+            <div class="header-actions">
+                <i class="fa-regular fa-bookmark"></i>
+                <i class="fa-regular fa-file"></i>
+                <i class="fa-solid fa-graduation-cap"></i>
+                <i class="fa-regular fa-comment"></i>
+                <div class="user-avatar">
+                    <img src="https://ui-avatars.com/api/?name=User&background=random" alt="User">
+                </div>
+            </div>
+        </header>
+
+        <div class="content-grid">
+            <!-- Left Panel: Chat & Context -->
+            <div class="left-panel">
+                <div class="panel-header">
+                    <h2>File Uploads</h2>
+                    <i class="fa-solid fa-chevron-down"></i>
+                </div>
+
+                <div class="chat-history" id="chatMessages">
+                    <!-- AI Card -->
+                    <div class="chat-card ai">
+                        <div class="card-icon orange">
+                            <i class="fa-solid fa-arrows-rotate"></i>
+                        </div>
+                        <div class="card-content">
+                            <div class="card-title">
+                                <i class="fa-regular fa-file-pdf"></i>
+                                <span>Quote comparison</span>
+                            </div>
+                            <p>The documents have been successfully analyzed. I'm here to help you understand or explore
+                                any aspect of their content.</p>
+                        </div>
+                    </div>
+
+                    <!-- User Question -->
+                    <div class="chat-card user">
+                        <div class="user-pic">
+                            <img src="https://ui-avatars.com/api/?name=User&background=random" alt="U">
+                        </div>
+                        <div class="user-text">
+                            Include table for sections that contain comparisons
+                        </div>
+                    </div>
+
+                    <!-- AI Card -->
+                    <div class="chat-card ai">
+                        <div class="card-icon orange">
+                            <i class="fa-solid fa-arrows-rotate"></i>
+                        </div>
+                        <div class="card-content">
+                            <div class="card-title">
+                                <i class="fa-regular fa-file-pdf"></i>
+                                <span>Quote comparison</span>
+                            </div>
+                            <p>Note: Class Code Mapping.pdf excluded - contains classification codes reference material,
+                                not an insurance quote for comparison.</p>
+                            <div class="card-actions">
+                                <i class="fa-regular fa-thumbs-up"></i>
+                                <i class="fa-regular fa-thumbs-down"></i>
+                                <i class="fa-regular fa-copy"></i>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Suggestions -->
+                    <div class="suggestions-section">
+                        <h3><i class="fa-regular fa-lightbulb"></i> Suggestions</h3>
+                        <div class="suggestion-chips">
+                            <div class="chip">Can you summarize the key coverage details and limits?</div>
+                            <div class="chip">Identify any coverage gaps or missing endorsements in the document.</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Input Area (Fixed Bottom) -->
+                <div class="chat-input-container">
+                    <div class="input-wrapper" id="inputWrapper">
+                        <textarea id="chatInput" placeholder="Type a message..." rows="1"></textarea>
+
+                        <!-- Default Controls -->
+                        <div class="input-controls default-controls">
+                            <button id="micBtn" class="mic-btn" title="Speak">
+                                <i class="fa-solid fa-microphone"></i>
+                            </button>
+                            <button class="attach-btn" title="Attach">
+                                <i class="fa-solid fa-paperclip"></i>
+                            </button>
+                            <button id="sendBtn" class="send-btn" title="Send">
+                                <i class="fa-regular fa-paper-plane"></i>
+                            </button>
+                        </div>
+
+                        <!-- Active Controls (Stop Button) -->
+                        <div class="input-controls active-controls" style="display: none;">
+                            <button id="stopBtn" class="stop-btn" title="Stop">
+                                <span class="stop-square"></span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Panel: Workspace -->
+            <div class="right-panel">
+                <div class="tabs-bar">
+                    <div class="tab">
+                        <i class="fa-regular fa-file-lines"></i>
+                        All Artifacts
+                    </div>
+                    <div class="tab active">
+                        <i class="fa-regular fa-file-lines"></i>
+                        Commercial Insurance Policy C...
+                        <i class="fa-solid fa-xmark close-tab"></i>
+                    </div>
+                </div>
+
+                <div class="document-view">
+                    <div class="doc-header">
+                        <h2>Commercial Auto Insurance Quote Analysis</h2>
+                        <div class="doc-actions">
+                            <i class="fa-regular fa-thumbs-up"></i>
+                            <i class="fa-regular fa-thumbs-down"></i>
+                            <i class="fa-regular fa-copy"></i>
+                            <i class="fa-solid fa-print"></i>
+                            <i class="fa-solid fa-download"></i>
+                            <i class="fa-solid fa-share-nodes"></i>
+                        </div>
+                    </div>
+                    <div class="doc-content-placeholder">
+                        <!-- Content would go here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Lottie Player -->
+    <script src="https://unpkg.com/@lottiefiles/lottie-player@latest/dist/lottie-player.js"></script>
+    <script src="script.js"></script>
+</body>
+
+</html>
