@@ -9,7 +9,14 @@ document.addEventListener('DOMContentLoaded', () => {
     let stopManually = false;
     let baseText = "";
 
-    // 1. INITIALIZE ENGINE
+    // Initialize Audio Variables
+    let audioContext;
+    let analyser;
+    let dataArray;
+    let animationId;
+    let stream;
+
+    // 1. SETUP SPEECH ENGINE
     if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         recognition = new SpeechRecognition();
@@ -18,15 +25,9 @@ document.addEventListener('DOMContentLoaded', () => {
         recognition.interimResults = true;
         recognition.lang = 'en-US';
 
-        let audioContext;
-        let analyser;
-        let dataArray;
-        let animationId;
-        let stream;
-
         // --- SPEECH HANDLERS ---
         recognition.onstart = () => {
-            console.log("Speech Engine: CLAIMED MICROPHONE");
+            console.log("Speech: Listening Started");
             isRecording = true;
             baseText = chatInput.value;
             if (baseText.length > 0 && !baseText.endsWith(' ')) baseText += ' ';
@@ -36,53 +37,57 @@ document.addEventListener('DOMContentLoaded', () => {
             document.querySelector('.default-controls').style.display = 'none';
             document.querySelector('.active-controls').style.display = 'flex';
             chatInput.placeholder = "Listening...";
-
-            // START ANIMATION ONLY AFTER SPEECH STARTS
-            startVisualizer();
         };
 
         recognition.onresult = (event) => {
             let sessionText = "";
-            for (let i = 0; i < event.results.length; i++) {
+            for (let i = event.resultIndex; i < event.results.length; i++) {
                 sessionText += event.results[i][0].transcript;
             }
-
-            // FORCE UPDATE TEXT BOX
             chatInput.value = baseText + sessionText;
 
-            // Auto-resize
+            // Auto-size
             chatInput.style.height = 'auto';
             chatInput.style.height = (chatInput.scrollHeight) + 'px';
-            chatInput.scrollTop = chatInput.scrollHeight;
         };
 
         recognition.onerror = (event) => {
             console.error("Speech Error:", event.error);
             if (event.error === 'not-allowed') {
-                alert("Please click the 'Allow' button for the microphone!");
+                alert("Please check your browser's address bar and click the 'Allow' icon for the microphone.");
                 stopRecording();
             }
         };
 
         recognition.onend = () => {
+            // Keep it alive on GitHub Pages
             if (isRecording && !stopManually) {
-                console.log("Connection lost, reconnecting...");
                 try { recognition.start(); } catch (e) { }
             }
         };
 
-        // --- SUB-FUNCTIONS ---
-        async function startVisualizer() {
+        // --- CORE FUNCTIONS ---
+        // CRITICAL: This must be triggered by a direct user click for HTTPS stability
+        async function startRecording() {
+            stopManually = false;
+
             try {
-                // We don't call getUserMedia again, we try to use the existing logic window
+                // 1. Request Microphone Stream (The "Master Key")
                 stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+                // 2. Start Speech Engine immediately
+                recognition.start();
+
+                // 3. Start Visualizer immediately (No delay)
                 audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                if (audioContext.state === 'suspended') await audioContext.resume();
+
                 const source = audioContext.createMediaStreamSource(stream);
                 analyser = audioContext.createAnalyser();
                 source.connect(analyser);
                 dataArray = new Uint8Array(analyser.frequencyBinCount);
 
-                const draw = () => {
+                const renderAnimation = () => {
                     if (!isRecording) return;
                     analyser.getByteFrequencyData(dataArray);
                     let sum = 0;
@@ -90,11 +95,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     let avg = sum / dataArray.length;
                     let scale = 1 + (avg / 128) * 1.5;
                     document.getElementById('stopBtn').style.setProperty('--glow-scale', Math.min(scale, 1.8));
-                    animationId = requestAnimationFrame(draw);
+                    animationId = requestAnimationFrame(renderAnimation);
                 };
-                draw();
-            } catch (e) {
-                console.warn("Visualizer failed but speech is working:", e);
+                renderAnimation();
+
+            } catch (err) {
+                console.error("Mic access failed on live site:", err);
+                alert("Could not access microphone. Ensure you are on HTTPS and have granted permission.");
             }
         }
 
@@ -116,25 +123,16 @@ document.addEventListener('DOMContentLoaded', () => {
             chatInput.placeholder = "Type a message...";
         }
 
-        // --- CLICK LISTENERS ---
-        micBtn.addEventListener('click', () => {
-            stopManually = false;
-            // START SPEECH FIRST - This is the key for Mac
-            try {
-                recognition.start();
-            } catch (e) {
-                console.log("Mic already active");
-            }
-        });
-
+        // --- LISTENERS ---
+        micBtn.addEventListener('click', startRecording);
         document.getElementById('stopBtn').addEventListener('click', stopRecording);
 
     } else {
         micBtn.style.display = 'none';
-        alert("Browser not supported.");
+        alert("This browser doesn't support speech recognition.");
     }
 
-    // Standard Messaging
+    // Messaging logic
     sendBtn.addEventListener('click', () => {
         const text = chatInput.value.trim();
         if (!text) return;
