@@ -7,18 +7,17 @@ document.addEventListener('DOMContentLoaded', () => {
     let recognition;
     let isRecording = false;
     let stopManually = false;
+    let baseText = "";
 
     // Check for browser support
     if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         recognition = new SpeechRecognition();
 
-        // Critical settings for stability
         recognition.continuous = true;
         recognition.interimResults = true;
         recognition.lang = 'en-US';
 
-        let baseText = "";
         let audioContext;
         let analyser;
         let dataArray;
@@ -39,81 +38,49 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         recognition.onstart = () => {
-            console.log("Recognition started...");
-            // Only update baseText if we're starting a FRESH recording session
-            // or if we've actually moved beyond the previous baseText
-            if (!isRecording) {
-                baseText = chatInput.value;
-                if (baseText.length > 0 && !baseText.endsWith(' ') && !baseText.endsWith('\n')) {
-                    baseText += ' ';
-                }
-            }
+            console.log("Speech engine ACTIVE");
             isRecording = true;
-        };
-
-        recognition.onend = () => {
-            console.log("Recognition ended. Manual stop:", stopManually);
-
-            // If we didn't mean to stop (auto-pause), restart it!
-            if (isRecording && !stopManually) {
-                console.log("Auto-restarting speech engine...");
-                try {
-                    recognition.start();
-                } catch (e) {
-                    console.log("Restart attempted while active:", e);
-                }
-                return;
-            } else if (stopManually) {
-                // Real stop cleanup
-                isRecording = false;
-                document.querySelector('.input-wrapper').classList.remove('recording');
-                document.querySelector('.default-controls').style.display = 'flex';
-                document.querySelector('.active-controls').style.display = 'none';
-                chatInput.placeholder = "Type a message...";
-                micBtn.classList.remove('active');
-                stopVolumeAnimation();
+            // Capture existing text only when we FIRST start
+            if (stopManually !== false || baseText === "") {
+                baseText = chatInput.value;
+                if (baseText.length > 0 && !baseText.endsWith(' ')) baseText += ' ';
             }
         };
 
         recognition.onresult = (event) => {
-            let interim_transcript = '';
-            let final_transcript = '';
-
-            for (let i = event.resultIndex; i < event.results.length; ++i) {
-                if (event.results[i].isFinal) {
-                    final_transcript += event.results[i][0].transcript;
-                } else {
-                    interim_transcript += event.results[i][0].transcript;
-                }
+            let sessionText = "";
+            for (let i = 0; i < event.results.length; i++) {
+                sessionText += event.results[i][0].transcript;
             }
 
-            if (final_transcript) {
-                baseText += final_transcript + ' ';
-            }
+            // Update the input box IMMEDIATELY
+            chatInput.value = baseText + sessionText;
 
-            chatInput.value = baseText + interim_transcript;
-
-            // Auto-resize and scroll
+            // Auto-resize the box as you talk
             chatInput.style.height = 'auto';
             chatInput.style.height = (chatInput.scrollHeight) + 'px';
             chatInput.scrollTop = chatInput.scrollHeight;
-
-            chatInput.dispatchEvent(new Event('input'));
         };
 
         recognition.onerror = (event) => {
-            console.warn('Speech recognition error type:', event.error);
+            console.error("Speech Error:", event.error);
             if (event.error === 'not-allowed') {
-                isRecording = false;
-                stopManually = true;
-                alert('Microphone access blocked. Please enable it in browser settings.');
+                alert("Please allow microphone access in your browser settings.");
+                stopRecording();
             }
         };
 
-        // Unified Activation
-        micBtn.addEventListener('click', () => {
-            if (isRecording) return;
+        recognition.onend = () => {
+            console.log("Speech engine logic ended.");
+            // If it stopped by accident (auto-pause), restart it!
+            if (isRecording && !stopManually) {
+                console.log("Restarting engine...");
+                try { recognition.start(); } catch (e) { }
+            }
+        };
 
+        function startRecording() {
+            isRecording = true;
             stopManually = false;
 
             // UI Update
@@ -122,84 +89,64 @@ document.addEventListener('DOMContentLoaded', () => {
             document.querySelector('.active-controls').style.display = 'flex';
             chatInput.placeholder = "Listening...";
 
-            // 1. Get Mic for Animation
+            // Start Animation and Speech together
             navigator.mediaDevices.getUserMedia({ audio: true })
                 .then(s => {
                     stream = s;
                     audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                    const source = audioContext.createMediaStreamSource(stream);
+                    analyser = audioContext.createAnalyser();
+                    source.connect(analyser);
+                    dataArray = new Uint8Array(analyser.frequencyBinCount);
 
-                    const startAudio = () => {
-                        analyser = audioContext.createAnalyser();
-                        analyser.fftSize = 256;
-                        const source = audioContext.createMediaStreamSource(stream);
-                        source.connect(analyser);
-                        dataArray = new Uint8Array(analyser.frequencyBinCount);
-
-                        const update = () => {
-                            if (!isRecording) return;
-                            analyser.getByteFrequencyData(dataArray);
-                            let sum = 0;
-                            for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
-                            const average = sum / dataArray.length;
-
-                            const glowScale = Math.min(1 + (average / 128) * 1.5, 1.8);
-                            const stopBtn = document.getElementById('stopBtn');
-                            if (stopBtn) stopBtn.style.setProperty('--glow-scale', glowScale);
-
-                            animationId = requestAnimationFrame(update);
-                        };
-                        update();
+                    const animateGlow = () => {
+                        if (!isRecording) return;
+                        analyser.getByteFrequencyData(dataArray);
+                        let sum = 0;
+                        for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
+                        let scale = 1 + (sum / dataArray.length / 128) * 1.5;
+                        document.getElementById('stopBtn').style.setProperty('--glow-scale', Math.min(scale, 1.8));
+                        animationId = requestAnimationFrame(animateGlow);
                     };
+                    animateGlow();
 
-                    if (audioContext.state === 'suspended') {
-                        audioContext.resume().then(startAudio);
-                    } else {
-                        startAudio();
-                    }
-
-                    // 2. Start Speech Engine
-                    try {
-                        recognition.start();
-                    } catch (e) {
-                        console.error("Recognition start error:", e);
-                    }
+                    try { recognition.start(); } catch (e) { }
                 })
-                .catch(err => {
-                    console.error("Mic access denied:", err);
-                    isRecording = false;
-                    stopManually = true;
-                    recognition.onend();
+                .catch(e => {
+                    console.error(e);
+                    stopRecording();
                 });
-        });
+        }
+
+        function stopRecording() {
+            isRecording = false;
+            stopManually = true;
+            try { recognition.stop(); } catch (e) { }
+            stopVolumeAnimation();
+
+            document.querySelector('.input-wrapper').classList.remove('recording');
+            document.querySelector('.default-controls').style.display = 'flex';
+            document.querySelector('.active-controls').style.display = 'none';
+            chatInput.placeholder = "Type a message...";
+        }
+
+        micBtn.addEventListener('click', startRecording);
+        document.getElementById('stopBtn').addEventListener('click', stopRecording);
 
     } else {
         micBtn.style.display = 'none';
         alert('Your browser does not support speech recognition.');
     }
 
-    // Stop Button Listener
-    const stopBtn = document.getElementById('stopBtn');
-    if (stopBtn) {
-        stopBtn.addEventListener('click', () => {
-            stopManually = true; // Signals a real deliberate stop
-            if (recognition) {
-                recognition.stop();
-            }
-            // recognition.onend will handle the UI cleanup
-        });
-    }
-
+    // Standard Messaging Logic
     function sendMessage() {
         const text = chatInput.value.trim();
         if (!text) return;
         appendMessage('user', text);
         chatInput.value = '';
         chatInput.style.height = 'auto';
-        showTypingIndicator();
-        setTimeout(() => {
-            removeTypingIndicator();
-            appendMessage('ai', generateAIResponse(text));
-        }, 1500);
+        // Mocking AI response
+        setTimeout(() => appendMessage('ai', "I received your message!"), 600);
     }
 
     sendBtn.addEventListener('click', sendMessage);
@@ -210,56 +157,13 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    chatInput.addEventListener('input', function () {
-        this.style.height = 'auto';
-        this.style.height = (this.scrollHeight) + 'px';
-    });
-
     function appendMessage(sender, text) {
-        const messageDiv = document.createElement('div');
-        messageDiv.classList.add('chat-card', sender);
-        if (sender === 'ai') {
-            messageDiv.innerHTML = `
-                <div class="card-icon orange"><i class="fa-solid fa-arrows-rotate"></i></div>
-                <div class="card-content"><p>${text}</p></div>
-            `;
-        } else {
-            messageDiv.innerHTML = `
-                <div class="user-pic"><img src="https://ui-avatars.com/api/?name=User&background=random" alt="U"></div>
-                <div class="user-text">${text}</div>
-            `;
-        }
-        chatMessages.appendChild(messageDiv);
+        const div = document.createElement('div');
+        div.className = `chat-card ${sender}`;
+        div.innerHTML = sender === 'ai' ?
+            `<div class="card-icon orange"><i class="fa-solid fa-arrows-rotate"></i></div><div class="card-content"><p>${text}</p></div>` :
+            `<div class="user-pic"><img src="https://ui-avatars.com/api/?name=User" alt="U"></div><div class="user-text">${text}</div>`;
+        chatMessages.appendChild(div);
         chatMessages.scrollTop = chatMessages.scrollHeight;
-    }
-
-    let typingIndicatorElement = null;
-    function showTypingIndicator() {
-        if (typingIndicatorElement) return;
-        const indicatorDiv = document.createElement('div');
-        indicatorDiv.classList.add('chat-card', 'ai', 'typing');
-        indicatorDiv.innerHTML = `
-            <div class="card-icon orange"><i class="fa-solid fa-arrows-rotate"></i></div>
-            <div class="card-content" style="min-width: 60px; display: flex; align-items: center; justify-content: center;">
-                <span class="dot" style="background: #a0a0a0;"></span>
-                <span class="dot" style="background: #a0a0a0;"></span>
-                <span class="dot" style="background: #a0a0a0;"></span>
-            </div>
-        `;
-        chatMessages.appendChild(indicatorDiv);
-        chatMessages.scrollTop = chatMessages.scrollHeight;
-        typingIndicatorElement = indicatorDiv;
-    }
-
-    function removeTypingIndicator() {
-        if (typingIndicatorElement) {
-            typingIndicatorElement.remove();
-            typingIndicatorElement = null;
-        }
-    }
-
-    function generateAIResponse(userText) {
-        const responses = ["Interesting!", "Tell me more.", "I see.", "Got it.", "Processing..."];
-        return responses[Math.floor(Math.random() * responses.length)];
     }
 });
