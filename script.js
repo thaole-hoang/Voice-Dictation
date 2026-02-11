@@ -9,7 +9,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let stopManually = false;
     let baseText = "";
 
-    // Check for browser support
+    // Initialization of Speech Engine
     if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         recognition = new SpeechRecognition();
@@ -24,106 +24,103 @@ document.addEventListener('DOMContentLoaded', () => {
         let animationId;
         let stream;
 
-        function cleanupResources() {
-            if (animationId) cancelAnimationFrame(animationId);
-            if (audioContext && audioContext.state !== 'closed') audioContext.close();
-            if (stream) {
-                stream.getTracks().forEach(track => track.stop());
-                stream = null;
-            }
-            const stopBtn = document.getElementById('stopBtn');
-            if (stopBtn) stopBtn.style.setProperty('--glow-scale', '1');
-        }
-
-        // --- SPEECH ENGINE EVENTS ---
+        // --- HANDLERS ---
         recognition.onstart = () => {
-            console.log("Recognition Engine: Online");
+            console.log("Recognition: ACTIVE");
             isRecording = true;
-            // Capture existing box text
+            // Freeze the current text as our 'base'
             baseText = chatInput.value;
             if (baseText.length > 0 && !baseText.endsWith(' ')) baseText += ' ';
-
-            // Switch UI immediately
-            document.querySelector('.input-wrapper').classList.add('recording');
-            document.querySelector('.default-controls').style.display = 'none';
-            document.querySelector('.active-controls').style.display = 'flex';
-            chatInput.placeholder = "Listening...";
         };
 
         recognition.onresult = (event) => {
             let sessionText = "";
-            for (let i = 0; i < event.results.length; i++) {
+            for (let i = event.resultIndex; i < event.results.length; i++) {
                 sessionText += event.results[i][0].transcript;
             }
 
-            // LIVE UPDATE: Push directly to input field
+            // UPDATE BOX IN REAL-TIME
             chatInput.value = baseText + sessionText;
 
-            // UI Feedback
+            // Resize box automatically
             chatInput.style.height = 'auto';
             chatInput.style.height = (chatInput.scrollHeight) + 'px';
-            chatInput.scrollTop = chatInput.scrollHeight;
         };
 
         recognition.onerror = (event) => {
-            console.error("Mic/Speech Error:", event.error);
+            console.error("Speech Engine Error:", event.error);
+            if (event.error === 'no-speech' && !stopManually) {
+                // Ignore silent timeouts, just keep listening
+                return;
+            }
             if (event.error === 'not-allowed') {
-                alert("Microphone access is required for voice input. Please click 'Allow' in your browser address bar.");
+                alert("Microphone permission denied. Please click the 'Lock' icon next to the URL and Allow Microphone.");
                 stopRecording();
             }
         };
 
         recognition.onend = () => {
-            // Auto-restart if we didn't manually stop
+            // Auto-restart if browser stops engine but USER didn't click stop
             if (isRecording && !stopManually) {
-                console.log("Engine timed out, auto-restarting...");
+                console.log("Auto-refreshing mic...");
                 try { recognition.start(); } catch (e) { }
             }
         };
 
-        // --- CONTROL FUNCTIONS ---
+        // --- CORE FUNCTIONS ---
         async function startRecording() {
             stopManually = false;
 
-            // 1. START SPEECH FIRST (Critical for mobile permission)
-            try {
-                recognition.start();
-            } catch (e) {
-                console.warn("Recognition already active or blocked:", e);
-            }
+            // 1. SWITCH UI (Do this BEFORE browser prompts to reduce lag)
+            document.querySelector('.input-wrapper').classList.add('recording');
+            document.querySelector('.default-controls').style.display = 'none';
+            document.querySelector('.active-controls').style.display = 'flex';
+            chatInput.placeholder = "Listening...";
 
-            // 2. START ANIMATION
             try {
+                // 2. REQUEST MIC (This also primes the speech engine)
                 stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                audioContext = new (window.AudioContext || window.webkitAudioContext)();
-                if (audioContext.state === 'suspended') await audioContext.resume();
 
+                // 3. START SPEECH
+                recognition.start();
+
+                // 4. START ANIMATION
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
                 const source = audioContext.createMediaStreamSource(stream);
                 analyser = audioContext.createAnalyser();
                 source.connect(analyser);
                 dataArray = new Uint8Array(analyser.frequencyBinCount);
 
-                const renderFrame = () => {
+                const updateGlow = () => {
                     if (!isRecording) return;
                     analyser.getByteFrequencyData(dataArray);
                     let sum = 0;
                     for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
-                    let avg = sum / dataArray.length;
-                    let scale = 1 + (avg / 128) * 1.5;
+                    let volume = sum / dataArray.length;
+                    let scale = 1 + (volume / 128) * 1.5;
                     document.getElementById('stopBtn').style.setProperty('--glow-scale', Math.min(scale, 1.8));
-                    animationId = requestAnimationFrame(renderFrame);
+                    animationId = requestAnimationFrame(updateGlow);
                 };
-                renderFrame();
+                updateGlow();
+
             } catch (err) {
-                console.error("Mic animation failed:", err);
+                console.error("Critical Start Error:", err);
+                stopRecording();
             }
         }
 
         function stopRecording() {
             isRecording = false;
             stopManually = true;
+
             try { recognition.stop(); } catch (e) { }
-            cleanupResources();
+
+            if (animationId) cancelAnimationFrame(animationId);
+            if (audioContext) audioContext.close();
+            if (stream) {
+                stream.getTracks().forEach(t => t.stop());
+                stream = null;
+            }
 
             document.querySelector('.input-wrapper').classList.remove('recording');
             document.querySelector('.default-controls').style.display = 'flex';
@@ -131,23 +128,22 @@ document.addEventListener('DOMContentLoaded', () => {
             chatInput.placeholder = "Type a message...";
         }
 
-        // Listeners
         micBtn.addEventListener('click', startRecording);
         document.getElementById('stopBtn').addEventListener('click', stopRecording);
 
     } else {
         micBtn.style.display = 'none';
-        alert("Your browser doesn't support Voice Dictation.");
+        alert("This browser is too old for Voice Dictation.");
     }
 
-    // --- CHAT LOGIC ---
+    // --- STANDARD CHAT ---
     function sendMessage() {
         const text = chatInput.value.trim();
         if (!text) return;
         appendMessage('user', text);
         chatInput.value = '';
         chatInput.style.height = 'auto';
-        setTimeout(() => appendMessage('ai', "I've received your message! How else can I help?"), 700);
+        setTimeout(() => appendMessage('ai', "I hear you! What else?"), 500);
     }
 
     sendBtn.addEventListener('click', sendMessage);
