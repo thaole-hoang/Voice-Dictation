@@ -6,11 +6,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     let recognition;
     let isRecording = false;
+    let stopManually = false;
 
     // Check for browser support
     if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         recognition = new SpeechRecognition();
+
+        // Critical settings for stability
         recognition.continuous = true;
         recognition.interimResults = true;
         recognition.lang = 'en-US';
@@ -36,6 +39,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         recognition.onstart = () => {
+            console.log("Recognition started...");
             baseText = chatInput.value;
             if (baseText.length > 0 && !baseText.endsWith(' ') && !baseText.endsWith('\n')) {
                 baseText += ' ';
@@ -43,25 +47,26 @@ document.addEventListener('DOMContentLoaded', () => {
         };
 
         recognition.onend = () => {
-            // Only reset UI if we actually intended to stop recording
-            if (!isRecording) {
-                document.querySelector('.input-wrapper').classList.remove('recording');
-                document.querySelector('.default-controls').style.display = 'flex';
-                document.querySelector('.active-controls').style.display = 'none';
-                chatInput.placeholder = "Type a message...";
-                micBtn.classList.remove('active');
-                stopVolumeAnimation();
-            } else {
-                // If it ended unexpectedly but we still want to record, try to restart
+            console.log("Recognition ended. Manual stop:", stopManually);
+
+            // If we didn't mean to stop (auto-pause), restart it!
+            if (isRecording && !stopManually) {
+                console.log("Auto-restarting speech engine...");
                 try {
                     recognition.start();
                 } catch (e) {
-                    console.log("Auto-restart failed:", e);
-                    // If restart fails, then truly stop
-                    isRecording = false;
-                    recognition.onend();
+                    console.log("Restart attempted while active:", e);
                 }
+                return;
             }
+
+            // Real stop cleanup
+            document.querySelector('.input-wrapper').classList.remove('recording');
+            document.querySelector('.default-controls').style.display = 'flex';
+            document.querySelector('.active-controls').style.display = 'none';
+            chatInput.placeholder = "Type a message...";
+            micBtn.classList.remove('active');
+            stopVolumeAnimation();
         };
 
         recognition.onresult = (event) => {
@@ -71,40 +76,38 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (event.results[i].isFinal) final_transcript += event.results[i][0].transcript;
                 else interim_transcript += event.results[i][0].transcript;
             }
-            baseText += final_transcript;
+            if (final_transcript) {
+                baseText += final_transcript + ' ';
+            }
             chatInput.value = baseText + interim_transcript;
             chatInput.dispatchEvent(new Event('input'));
             chatInput.scrollTop = chatInput.scrollHeight;
         };
 
         recognition.onerror = (event) => {
-            console.error('Speech recognition error', event.error);
-            // Ignore 'no-speech' and 'aborted' as they often happen during prompts or silence
-            if (event.error === 'no-speech' || event.error === 'aborted') {
-                return;
-            }
-
-            // For real errors like 'not-allowed', then we stop
-            isRecording = false;
-            recognition.onend();
+            console.warn('Speech recognition error type:', event.error);
+            // 'no-speech' and 'aborted' are not fatal, we let onend handle the restart
             if (event.error === 'not-allowed') {
-                alert('Microphone access blocked. Please enable it in your browser settings.');
+                isRecording = false;
+                stopManually = true;
+                alert('Microphone access blocked. Please enable it in browser settings.');
             }
         };
 
-        // ENHANCED: Single Click Workflow
+        // Unified Activation
         micBtn.addEventListener('click', () => {
             if (isRecording) return;
 
             isRecording = true;
+            stopManually = false;
 
-            // Immediate UI Update
+            // UI Update
             document.querySelector('.input-wrapper').classList.add('recording');
             document.querySelector('.default-controls').style.display = 'none';
             document.querySelector('.active-controls').style.display = 'flex';
             chatInput.placeholder = "Listening...";
 
-            // Start Volume Data FIRST (This usually triggers the permission prompt)
+            // 1. Get Mic for Animation
             navigator.mediaDevices.getUserMedia({ audio: true })
                 .then(s => {
                     stream = s;
@@ -139,12 +142,11 @@ document.addEventListener('DOMContentLoaded', () => {
                         startAudio();
                     }
 
-                    // Once we have the stream, start recognition
-                    // This is still within the user-click async stack
+                    // 2. Start Speech Engine
                     try {
                         recognition.start();
                     } catch (e) {
-                        console.error("Delayed recognition start error:", e);
+                        console.error("Recognition start error:", e);
                     }
                 })
                 .catch(err => {
@@ -163,7 +165,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const stopBtn = document.getElementById('stopBtn');
     if (stopBtn) {
         stopBtn.addEventListener('click', () => {
-            isRecording = false; // Set to false first so onend knows to truly stop
+            isRecording = false;
+            stopManually = true; // Prevents auto-restart logic
             if (recognition) {
                 recognition.stop();
             }
