@@ -40,10 +40,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
         recognition.onstart = () => {
             console.log("Recognition started...");
-            baseText = chatInput.value;
-            if (baseText.length > 0 && !baseText.endsWith(' ') && !baseText.endsWith('\n')) {
-                baseText += ' ';
+            // Only update baseText if we're starting a FRESH recording session
+            // or if we've actually moved beyond the previous baseText
+            if (!isRecording) {
+                baseText = chatInput.value;
+                if (baseText.length > 0 && !baseText.endsWith(' ') && !baseText.endsWith('\n')) {
+                    baseText += ' ';
+                }
             }
+            isRecording = true;
         };
 
         recognition.onend = () => {
@@ -58,35 +63,46 @@ document.addEventListener('DOMContentLoaded', () => {
                     console.log("Restart attempted while active:", e);
                 }
                 return;
+            } else if (stopManually) {
+                // Real stop cleanup
+                isRecording = false;
+                document.querySelector('.input-wrapper').classList.remove('recording');
+                document.querySelector('.default-controls').style.display = 'flex';
+                document.querySelector('.active-controls').style.display = 'none';
+                chatInput.placeholder = "Type a message...";
+                micBtn.classList.remove('active');
+                stopVolumeAnimation();
             }
-
-            // Real stop cleanup
-            document.querySelector('.input-wrapper').classList.remove('recording');
-            document.querySelector('.default-controls').style.display = 'flex';
-            document.querySelector('.active-controls').style.display = 'none';
-            chatInput.placeholder = "Type a message...";
-            micBtn.classList.remove('active');
-            stopVolumeAnimation();
         };
 
         recognition.onresult = (event) => {
             let interim_transcript = '';
             let final_transcript = '';
+
             for (let i = event.resultIndex; i < event.results.length; ++i) {
-                if (event.results[i].isFinal) final_transcript += event.results[i][0].transcript;
-                else interim_transcript += event.results[i][0].transcript;
+                if (event.results[i].isFinal) {
+                    final_transcript += event.results[i][0].transcript;
+                } else {
+                    interim_transcript += event.results[i][0].transcript;
+                }
             }
+
             if (final_transcript) {
                 baseText += final_transcript + ' ';
             }
+
             chatInput.value = baseText + interim_transcript;
-            chatInput.dispatchEvent(new Event('input'));
+
+            // Auto-resize and scroll
+            chatInput.style.height = 'auto';
+            chatInput.style.height = (chatInput.scrollHeight) + 'px';
             chatInput.scrollTop = chatInput.scrollHeight;
+
+            chatInput.dispatchEvent(new Event('input'));
         };
 
         recognition.onerror = (event) => {
             console.warn('Speech recognition error type:', event.error);
-            // 'no-speech' and 'aborted' are not fatal, we let onend handle the restart
             if (event.error === 'not-allowed') {
                 isRecording = false;
                 stopManually = true;
@@ -98,7 +114,6 @@ document.addEventListener('DOMContentLoaded', () => {
         micBtn.addEventListener('click', () => {
             if (isRecording) return;
 
-            isRecording = true;
             stopManually = false;
 
             // UI Update
@@ -152,6 +167,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 .catch(err => {
                     console.error("Mic access denied:", err);
                     isRecording = false;
+                    stopManually = true;
                     recognition.onend();
                 });
         });
@@ -165,12 +181,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const stopBtn = document.getElementById('stopBtn');
     if (stopBtn) {
         stopBtn.addEventListener('click', () => {
-            isRecording = false;
-            stopManually = true; // Prevents auto-restart logic
+            stopManually = true; // Signals a real deliberate stop
             if (recognition) {
                 recognition.stop();
             }
-            stopVolumeAnimation();
+            // recognition.onend will handle the UI cleanup
         });
     }
 
